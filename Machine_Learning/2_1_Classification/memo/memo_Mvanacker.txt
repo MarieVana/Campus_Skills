@@ -1,0 +1,136 @@
+1) What are the necessary preprocessing steps regarding:
+a) classes ?
+Les classes dans la varible cible => variable à prédire. 
+La variable target correspond dans ce jeu de données à la présence ou non d’une maladie du cœur.
+C’est une variable binaire, qui est codée en 0 = pas de maladie du cœur et 1 = maladie cœur.
+y = dataset["target"]
+X = dataset.drop("target") (toutes les autres colonnes)
+Cela permet de séparer clairement la cible (y) des variables explicatives (X).
+
+Il est important de vérifier l’équilibre des classes : si une classe est beaucoup plus représentée que l’autre, le modèle risque d’être biaisé.
+C’est pour cela qu’on utilise stratify=y dans le train_test_split pour garder la même proportion de classes dans le train et le test.
+Quand on fait un train_test_split, on veut que la proportion de patients malades / non malades (la variable target, y) soient les mêmes dans le jeu d’entraînement et dans le jeu de test.
+Ici on veut également 30 % du jeu de données dans le jeu test (70 % dans le jeu d’entraînement). On indiquera donc test_size = 0.3.
+X_train, X_test, y_train, y_test = train_test_split( X, y, random_state = 42, 
+                                                    test_size = 0.3,stratify = y)
+
+Cela garantit que la proportion de 0 et 1 dans y (malades / pas malades) est la même dans les deux sous-ensembles. Mais ça ne garantit rien pour les autres variables, par exemple le sexe.
+Dans le jeu de données actuel, on veut également que la proportion soit identique entre les hommes et les femmes que dans le jeu de départ : on va donc prendre dans la stratify la variable sexe en plus : 
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state = 42, 
+                                                    test_size = 0.3, 
+                                                    stratify = pd.concat([dataset['sex'], y], axis = 1))
+
+La stratification ne se fait pas seulement sur la classe de la cible, mais sur toutes les combinaisons possibles de sexe + target 
+Sexe	Target	Interprétation
+0	0	Femme sans maladie
+0	1	Femme avec maladie
+1	0	Homme sans maladie
+1	1	Homme avec maladie
+
+Le split aura le même ratio d’hommes/femmes et de malades/sains dans chaque sous-ensemble que dans la base de données de daprt.
+Si on ne contrôle pas le ratio du sexe dès le split, il se peut que le test contienne beaucoup plus d’hommes que de femmes (ou inversement) par rapport au jeu de données, ce qui fausserait les comparaisons.
+
+
+b) categorical features ? 
+
+On va regrouper les colonnes qui contiennent des valeurs qualitatives avec plusiuers modalités
+multicategorical_features = ['cp', 'restecg', 'slope', 'ca', 'thal']      
+Les modèles de machine learning ne peuvent pas lire du texte ou des catégories telles quelles, donc il faut les encoder.
+Pour cela, on utilise en général un One-Hot Encoding, via pd.get_dummies() :
+      df_encoded = pd.get_dummies(dataset[multicategorical_features], dtype=int, drop_first=False)
+Chaque modalité d’une variable devient une colonne binaire (0/1).
+On fait cet encodage avant de faire le split train/test, pour s’assurer que les deux jeux aient les mêmes colonnes.
+
+
+c) continuous features ?
+
+Ce sont les variables numériques  ici :
+continuous_features = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak']
+
+Ces variables n’ont pas toutes la même échelle (âge en années, cholestérol en mg/dL, etc.).
+Il faut donc les standardiser pour que le modèle ne soit pas influencé par les différences d’échelle. On va donc utiliser la fonction StandardScaler() de Scikit-Learn :
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_train_num = scaler.fit_transform(X_train[continuous_features])
+X_test_num = scaler.transform(X_test[continuous_features])
+
+⚠️ Comme évoquer lors de la régression linéaire : on fit transform le scaler uniquement sur le train et on transforme seulement le test.
+
+
+#Scaling continuous variables
+#TOFILL 
+scaler = StandardScaler()
+X_train_num = scaler.fit_transform(X_train[continuous_features])
+X_test_num = scaler.transform(X_test[continuous_features])
+
+
+
+
+2) Confusion matrix:
+
+Matrice de confusion :
+        Prédit 0  Prédit 1
+Vrai 0        45         5
+Vrai 1        12        29
+
+
+a)How many patient were incorrectly diagnosed with a Heart disease (false positives) ?
+Ici on va regarder les Faux Positifs (FP) c'est à dire les patients sains (Vrai 0) mais prédit comme malades (Prédit 1). 
+FP = 5
+
+b)How many patient were incorrectly diagnosed as being Healthy (false negatives)?   
+On va regarder les faux négatifs (FN) c'est à dire les patients malades (vrai 1), mais prédits comme sains (Prédit 0).
+FN = 12
+
+3) Changing the threshold:    
+a)What is the precision if we change the threshold to have a 0.95 recall ?      
+
+Dans cette partie, l’objectif était de régler le seuil de décision du modèle de manière à atteindre un recall d’environ 95 %.
+Autrement dit, on voulait que le modèle soit capable de détecter au moins 95 % des patients réellement malades, quitte à ce qu’il se trompe plus souvent en identifiant par erreur des personnes saines comme malades. 
+
+Pour trouver ce seuil, on a utilisé la courbe de précision–rappel (Precision–Recall Curve), qui montre l’évolution de la précision et du rappel en fonction des différents seuils de probabilité.  
+À partir des probabilités prédites par le modèle (y_test_proba), on a calculé tous les couples (recall, precision) pour chaque seuil, puis sélectionné le plus grand seuil permettant de conserver un recall supérieur 
+ou égal à 0.95.
+Cette approche nous a permis d’obtenir un seuil d’environ 0.0667.
+Avec ce seuil, le modèle devient plus “sensible” : il classe plus facilement un patient comme “malade”, ce qui augmente la proportion de vrais positifs mais aussi celle de faux positifs. 
+
+La précision associée à ce nouveau seuil diminue et est d’environ 48 % (0.4815).
+Cela signifie que, parmi toutes les personnes identifiées comme malades, près de la moitié le sont réellement, tandis que l’autre moitié correspond à de fausses alertes.
+Ce choix est cohérent avec le contexte médical :  
+il vaut mieux signaler un risque de maladie chez un patient qui se révélera ensuite sain (faux positif) que rater un vrai malade (faux négatif).
+
+
+
+b) How many patient were incorrectly diagnosed as being Healthy (false negatives)?   
+
+La matrice de confusion obtenue avec ce seuil est la suivante : 
+	           
+		 Prédit  0	Prédit 1
+Vrai 0 (sains)	23	37   
+Vrai 1 (malades)	3	38    
+
+On observe que 3 patients réellement malades ont été classés par erreur comme sains (Faux Négatifs), c’est-à-dire les malades que le modèle n’a pas su détecter.  
+Même si ce nombre reste relativement faible, il montre pourquoi il est important, dans un contexte médical, de privilégier un haut rappel (recall) :   
+réduire au maximum le risque de passer à côté d’un patient malade, même si cela entraîne davantage de fausses alertes.
+
+
+4) Choosing an overall metric:
+
+
+a) If I can compute my test sample probabilities and care more about the positive class, which overall metric should I use to compare classifiers ?    
+Dans ce cas, la métrique la plus adaptée pour comparer les performances des classifieurs est l’AUC de la courbe ROC (Area Under the ROC Curve).  
+Cette mesure prend en compte tous les seuils possibles et évalue la capacité globale du modèle à distinguer les deux classes (malade / sain).  
+
+Plus précisément :   
+L’axe des abscisses (FPR) représente la proportion de patients sains incorrectement prédits comme malades.  
+L’axe des ordonnées (TPR = Recall) correspond à la proportion de vrais malades correctement détectés.  
+
+L’AUC (Area Under Curve) correspond à l’aire sous cette courbe.  
+Elle varie entre 0.5 (modèle aléatoire) et 1.0 (modèle parfait).  
+Dans mon moèdle j'obitens une AUC = 0.8659, ce qui indique que mon modèle KNN est globalement très bon pour distinguer les patients malades des patients sains. 
+Cette métrique est donc idéale lorsqu’on dispose des probabilités de prédiction, car elle prend en compte toute la gamme de seuils possibles et ne dépend pas d’un choix particulier (comme le seuil 0.5). 
+
+b) And if I only have the class predictions and no probabilities ?    
+Dans ce cas, on ne peut pas tracer la courbe ROC ni calculer l’AUC, car ces mesures nécessitent les scores continus (probabilités). 
+On doit alors se limiter aux métriques calculées sur les classes prédictes, et on va alors choisir l'Accuracy, pour évaluer la proportion globale de bonnes prédictions, ou les Precision, Recall, et F1-score, pour analyser plus finement les performances du modèle, notamment sur la classe positive.   
+Ces indicateurs permettent d’évaluer la qualité du modèle à un seuil fixe (souvent 0.5), mais ils ne capturent pas le comportement du modèle sur l’ensemble des seuils comme le fait la courbe ROC.
