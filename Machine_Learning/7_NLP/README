@@ -1,0 +1,13 @@
+# Module: Machine Learning - Natural Language Processing
+
+## Outline
+This course will cover:
+* Text preprocessing for Natural Language Processing tasks
+* Bag-Of-Words representations of text for text classification
+* Long Short Term Memory networks (LSTM) for text classification
+* Re-using word embeddings to initialize an LSTM
+
+
+## Excercises & Tasks
+
+There is one notebook to be completed, where the missing code is denoted by the comment *#TOFILL*.
